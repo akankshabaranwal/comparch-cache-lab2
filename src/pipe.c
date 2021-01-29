@@ -30,150 +30,6 @@ void print_op(Pipe_Op *op)
 /* global pipeline state */
 Pipe_State pipe;
 
-/*Instruction cache */
-icache_block Icache[ICACHE_NUM_SETS][ICACHE_ASSOCIATIVITY];
-
-uint32_t icache_lookup(uint32_t mem_addr)
-{
-    uint32_t set_index = (mem_addr>>5)&(0X0000003F); //Set index = PC[10:5]
-
-    int blockIdx;
-    for(blockIdx = 0; blockIdx< ICACHE_ASSOCIATIVITY; blockIdx++)
-    {
-        if((mem_addr == Icache[set_index][blockIdx].address)&& (Icache[set_index][blockIdx].valid ==1))
-            break; //Its a hit
-    }
-
-    // Its a miss
-    if(blockIdx == ICACHE_ASSOCIATIVITY)
-    {
-        pipe.instr_miss_stall = MEMORY_MISS_STALL;
-        for(blockIdx = 0; blockIdx< ICACHE_ASSOCIATIVITY; blockIdx++)
-            {
-                if(Icache[set_index][blockIdx].lru == ICACHE_ASSOCIATIVITY-1)
-                    break; //Detected the lru block which can be replaced
-            }
-        
-        Icache[set_index][blockIdx].address = mem_addr;
-        Icache[set_index][blockIdx].instruction = mem_read_32(mem_addr);
-        Icache[set_index][blockIdx].valid = 1;
-
-        //Update LRU status
-        for(int i = 0; i< ICACHE_ASSOCIATIVITY; i++)
-            {
-                if( Icache[set_index][i].lru < Icache[set_index][blockIdx].lru)
-                    Icache[set_index][i].lru++;                
-            }
-    }
-    else
-    {
-        pipe.instr_miss_stall = 0;
-        for(int i=0; i<ICACHE_ASSOCIATIVITY; i++)
-        {
-            if( Icache[set_index][i].lru < Icache[set_index][blockIdx].lru)
-                Icache[set_index][i].lru++;
-        }
-    }
-    Icache[set_index][blockIdx].lru = 0;
-
-    return Icache[set_index][blockIdx].instruction;
-}
-
-/*Data cache */
-dcache_block Dcache[DCACHE_NUM_SETS][DCACHE_ASSOCIATIVITY];
-
-uint32_t dcache_lookup(uint32_t mem_addr)
-{
-    uint32_t set_index = (mem_addr>>5)&(0X000000FF); //Set index = PC[12:5]
-    int blockIdx;
-
-    for(blockIdx = 0; blockIdx< DCACHE_ASSOCIATIVITY; blockIdx++)
-    {
-
-        if((mem_addr == Dcache[set_index][blockIdx].address)&& (Dcache[set_index][blockIdx].valid ==1))
-            break; //Its a hit
-    }
-
-    // Its a miss
-    if(blockIdx == DCACHE_ASSOCIATIVITY)
-    {
-        pipe.data_miss_stall = MEMORY_MISS_STALL;
-        for(blockIdx = 0; blockIdx< DCACHE_ASSOCIATIVITY; blockIdx++)
-            {
-                if(Dcache[set_index][blockIdx].lru == DCACHE_ASSOCIATIVITY-1)
-                    break; //Detected the lru block which can be replaced
-            }
-        
-        Dcache[set_index][blockIdx].address = mem_addr;
-        Dcache[set_index][blockIdx].data = mem_read_32(mem_addr);
-        Dcache[set_index][blockIdx].valid = 1;
-
-        //Update LRU status
-        for(int i = 0; i< DCACHE_ASSOCIATIVITY; i++)
-            {
-                if( Dcache[set_index][i].lru < Dcache[set_index][blockIdx].lru)
-                    Dcache[set_index][i].lru++;                
-            }
-    }
-    else
-    {
-        pipe.data_miss_stall = 0;
-        for(int i=0; i<DCACHE_ASSOCIATIVITY; i++)
-        {
-            if( Dcache[set_index][i].lru < Dcache[set_index][blockIdx].lru)
-                Dcache[set_index][i].lru++;
-        }
-    }
-    Dcache[set_index][blockIdx].lru = 0;
-    return Dcache[set_index][blockIdx].data;
-}
-
-
-void dcache_write(uint32_t mem_addr, uint32_t val)
-{
-    uint32_t set_index = (mem_addr>>5)&(0X000000FF); //Set index = PC[12:5]
-
-    int blockIdx;
-    for(blockIdx = 0; blockIdx< DCACHE_ASSOCIATIVITY; blockIdx++)
-    {
-        if((mem_addr == Dcache[set_index][blockIdx].address)&& (Dcache[set_index][blockIdx].valid ==1))
-            break; //Its a hit
-    }
-
-    // Its a miss
-    if(blockIdx == DCACHE_ASSOCIATIVITY)
-    {
-        pipe.data_miss_stall = MEMORY_MISS_STALL;
-        for(blockIdx = 0; blockIdx< DCACHE_ASSOCIATIVITY; blockIdx++)
-            {
-                if(Dcache[set_index][blockIdx].lru == DCACHE_ASSOCIATIVITY-1)
-                    break; //Detected the lru block which can be replaced
-            }
-        
-        //Update LRU status
-        for(int i = 0; i< DCACHE_ASSOCIATIVITY; i++)
-            {
-                if( Dcache[set_index][i].lru < Dcache[set_index][blockIdx].lru)
-                    Dcache[set_index][i].lru++;                
-            }
-    }
-    else
-    {
-        pipe.data_miss_stall = 0;
-        for(int i=0; i<DCACHE_ASSOCIATIVITY; i++)
-        {
-            if( Dcache[set_index][i].lru < Dcache[set_index][blockIdx].lru)
-                Dcache[set_index][i].lru++;
-        }
-    }
-
-    Dcache[set_index][blockIdx].address = mem_addr;
-    mem_write_32(mem_addr, val);
-    Dcache[set_index][blockIdx].data = val;
-    Dcache[set_index][blockIdx].valid = 1;
-    Dcache[set_index][blockIdx].lru = 0;
-}
-
 /*L2 cache */
 L2cache_block L2cache[L2CACHE_NUM_SETS][L2CACHE_ASSOCIATIVITY];
 
@@ -211,7 +67,7 @@ uint32_t L2cache_lookup(uint32_t mem_addr)
     }
     else
     {
-        pipe.data_miss_stall = 0;
+        //pipe.data_miss_stall = 0;
         for(int i=0; i<L2CACHE_ASSOCIATIVITY; i++)
         {
             if( L2cache[set_index][i].lru < L2cache[set_index][blockIdx].lru)
@@ -237,7 +93,7 @@ void L2cache_write(uint32_t mem_addr, uint32_t val)
     // Its a miss
     if(blockIdx == L2CACHE_ASSOCIATIVITY)
     {
-        pipe.data_miss_stall = MEMORY_MISS_STALL;
+        //pipe.data_miss_stall = MEMORY_MISS_STALL;
         for(blockIdx = 0; blockIdx< L2CACHE_ASSOCIATIVITY; blockIdx++)
             {
                 if(L2cache[set_index][blockIdx].lru == L2CACHE_ASSOCIATIVITY-1)
@@ -253,7 +109,7 @@ void L2cache_write(uint32_t mem_addr, uint32_t val)
     }
     else
     {
-        pipe.data_miss_stall = 0;
+        //pipe.data_miss_stall = 0;
         for(int i=0; i<L2CACHE_ASSOCIATIVITY; i++)
         {
             if( L2cache[set_index][i].lru < L2cache[set_index][blockIdx].lru)
@@ -267,6 +123,153 @@ void L2cache_write(uint32_t mem_addr, uint32_t val)
     L2cache[set_index][blockIdx].valid = 1;
     L2cache[set_index][blockIdx].lru = 0;
 }
+
+
+/*Instruction cache */
+icache_block Icache[ICACHE_NUM_SETS][ICACHE_ASSOCIATIVITY];
+
+uint32_t icache_lookup(uint32_t mem_addr)
+{
+    uint32_t set_index = (mem_addr>>5)&(0X0000003F); //Set index = PC[10:5]
+
+    int blockIdx;
+    for(blockIdx = 0; blockIdx< ICACHE_ASSOCIATIVITY; blockIdx++)
+    {
+        if((mem_addr == Icache[set_index][blockIdx].address)&& (Icache[set_index][blockIdx].valid ==1))
+            break; //Its a hit
+    }
+
+    // Its a miss
+    if(blockIdx == ICACHE_ASSOCIATIVITY)
+    {
+        //pipe.instr_miss_stall = MEMORY_MISS_STALL;
+        for(blockIdx = 0; blockIdx< ICACHE_ASSOCIATIVITY; blockIdx++)
+            {
+                if(Icache[set_index][blockIdx].lru == ICACHE_ASSOCIATIVITY-1)
+                    break; //Detected the lru block which can be replaced
+            }
+        
+        Icache[set_index][blockIdx].address = mem_addr;
+        Icache[set_index][blockIdx].instruction = L2cache_lookup(mem_addr);
+        Icache[set_index][blockIdx].valid = 1;
+
+        //Update LRU status
+        for(int i = 0; i< ICACHE_ASSOCIATIVITY; i++)
+            {
+                if( Icache[set_index][i].lru < Icache[set_index][blockIdx].lru)
+                    Icache[set_index][i].lru++;                
+            }
+    }
+    else
+    {
+        //pipe.instr_miss_stall = 0;
+        for(int i=0; i<ICACHE_ASSOCIATIVITY; i++)
+        {
+            if( Icache[set_index][i].lru < Icache[set_index][blockIdx].lru)
+                Icache[set_index][i].lru++;
+        }
+    }
+    Icache[set_index][blockIdx].lru = 0;
+
+    return Icache[set_index][blockIdx].instruction;
+}
+
+/*Data cache */
+dcache_block Dcache[DCACHE_NUM_SETS][DCACHE_ASSOCIATIVITY];
+
+uint32_t dcache_lookup(uint32_t mem_addr)
+{
+    uint32_t set_index = (mem_addr>>5)&(0X000000FF); //Set index = PC[12:5]
+    int blockIdx;
+
+    for(blockIdx = 0; blockIdx< DCACHE_ASSOCIATIVITY; blockIdx++)
+    {
+
+        if((mem_addr == Dcache[set_index][blockIdx].address)&& (Dcache[set_index][blockIdx].valid ==1))
+            break; //Its a hit
+    }
+
+    // Its a miss
+    if(blockIdx == DCACHE_ASSOCIATIVITY)
+    {
+        //pipe.data_miss_stall = MEMORY_MISS_STALL;
+        for(blockIdx = 0; blockIdx< DCACHE_ASSOCIATIVITY; blockIdx++)
+            {
+                if(Dcache[set_index][blockIdx].lru == DCACHE_ASSOCIATIVITY-1)
+                    break; //Detected the lru block which can be replaced
+            }
+        
+        Dcache[set_index][blockIdx].address = mem_addr;
+        Dcache[set_index][blockIdx].data = L2cache_lookup(mem_addr);
+        Dcache[set_index][blockIdx].valid = 1;
+
+        //Update LRU status
+        for(int i = 0; i< DCACHE_ASSOCIATIVITY; i++)
+            {
+                if( Dcache[set_index][i].lru < Dcache[set_index][blockIdx].lru)
+                    Dcache[set_index][i].lru++;                
+            }
+    }
+    else
+    {
+        //pipe.data_miss_stall = 0;
+        for(int i=0; i<DCACHE_ASSOCIATIVITY; i++)
+        {
+            if( Dcache[set_index][i].lru < Dcache[set_index][blockIdx].lru)
+                Dcache[set_index][i].lru++;
+        }
+    }
+    Dcache[set_index][blockIdx].lru = 0;
+    return Dcache[set_index][blockIdx].data;
+}
+
+
+void dcache_write(uint32_t mem_addr, uint32_t val)
+{
+    uint32_t set_index = (mem_addr>>5)&(0X000000FF); //Set index = PC[12:5]
+
+    int blockIdx;
+    for(blockIdx = 0; blockIdx< DCACHE_ASSOCIATIVITY; blockIdx++)
+    {
+        if((mem_addr == Dcache[set_index][blockIdx].address)&& (Dcache[set_index][blockIdx].valid ==1))
+            break; //Its a hit
+    }
+
+    // Its a miss
+    if(blockIdx == DCACHE_ASSOCIATIVITY)
+    {
+        
+        for(blockIdx = 0; blockIdx< DCACHE_ASSOCIATIVITY; blockIdx++)
+            {
+                if(Dcache[set_index][blockIdx].lru == DCACHE_ASSOCIATIVITY-1)
+                    break; //Detected the lru block which can be replaced
+            }
+        
+        //Update LRU status
+        for(int i = 0; i< DCACHE_ASSOCIATIVITY; i++)
+            {
+                if( Dcache[set_index][i].lru < Dcache[set_index][blockIdx].lru)
+                    Dcache[set_index][i].lru++;                
+            }
+    }
+    else
+    {
+        //pipe.data_miss_stall = 0;
+        for(int i=0; i<DCACHE_ASSOCIATIVITY; i++)
+        {
+            if( Dcache[set_index][i].lru < Dcache[set_index][blockIdx].lru)
+                Dcache[set_index][i].lru++;
+        }
+    }
+
+    Dcache[set_index][blockIdx].address = mem_addr;
+    L2cache_write(mem_addr, val);
+
+    Dcache[set_index][blockIdx].data = val;
+    Dcache[set_index][blockIdx].valid = 1;
+    Dcache[set_index][blockIdx].lru = 0;
+}
+
 
 void pipe_init()
 {
