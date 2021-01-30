@@ -66,7 +66,6 @@ uint32_t DRAM_Memory_Controller(uint32_t mem_addr, int req_type)
     return data;
 }
 
-
 void DRAM_Memory_Controller_Wr(uint32_t mem_addr, uint32_t value)
 {
     uint32_t BankIdx = (mem_addr>>5) & 0X00000007; //addr[7:5]
@@ -369,6 +368,21 @@ void pipe_init()
                 }       
         }
 
+    //Initializing L2 cache
+    for(uint32_t set_index=0; set_index<L2CACHE_NUM_SETS;set_index++)
+        {
+            for (int blockIdx=0; blockIdx<L2CACHE_ASSOCIATIVITY; blockIdx++)
+                {
+                    L2cache[set_index][blockIdx].lru = blockIdx;
+                    L2cache[set_index][blockIdx].valid = 0;
+                    L2cache[set_index][blockIdx].data = 0;
+                }       
+        }    
+
+    for(int i=0; i<DRAM_NUM_BANKS;i++)
+        {
+                    DRAMOpenedRow[i] = 0;
+        }    
     pipe.instr_miss_stall = 0;
     pipe.data_miss_stall = 0;
 

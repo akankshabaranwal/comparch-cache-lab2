@@ -60,21 +60,9 @@ typedef struct L2_cache_block {
 // External data cache
 extern L2cache_block L2cache[L2CACHE_NUM_SETS][L2CACHE_ASSOCIATIVITY]; //Each element of this would be indexed according to appropriate set index
 
-// MSHR
-#define NUM_MSHR 16
-
 #define L2__HIT_LATENCY 15 
 #define L2_MISS_CONTROLLER_LATENCY 5 //Latency between L2 cache and memory controller
 #define L2_MISS__LATENCY 5
-
-typedef struct MSHR {
-    uint32_t address;
-    int valid;
-    int done;
-
-} mshr;
-
-extern mshr L2MSHR[NUM_MSHR];
 
 // DRAM parameters
 
@@ -186,8 +174,6 @@ typedef struct Pipe_State {
     uint32_t DRAM_Bank_Row_Open_Idx[DRAM_NUM_BANKS];
 
 } Pipe_State;
-
-
 
 /* global variable -- pipeline state */
 extern Pipe_State pipe;
