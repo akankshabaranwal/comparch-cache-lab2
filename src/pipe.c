@@ -30,10 +30,9 @@ void print_op(Pipe_Op *op)
 /* global pipeline state */
 Pipe_State pipe;
 
-//Request DRAMRequestQueue[DRAM_REQUEST_QUEUE_SIZE];
 int DRAMOpenedRow[DRAM_NUM_BANKS]; // Track the opened row in each bank
 
-uint32_t DRAM_Memory_Controller(uint32_t mem_addr, int req_type)
+uint32_t DRAM_Memory_Controller(uint32_t mem_addr, int req_type, uint32_t value)
 {
     uint32_t BankIdx = (mem_addr>>5) & 0X00000007; //addr[7:5]
     uint32_t RowIdx = (mem_addr>>16) & 0X0000FFFF; //addr[31:16]
@@ -52,7 +51,7 @@ uint32_t DRAM_Memory_Controller(uint32_t mem_addr, int req_type)
         dram_stall = dram_stall + DRAM_READWRITE_LATENCY;
     }
 
-    dram_stall = dram_stall + DRAM_BANK_BUSY_LATENCY + DRAM_DATA_BUS_LATENCY;
+    dram_stall = dram_stall + DRAM_BANK_BUSY_LATENCY + DRAM_DATA_BUS_LATENCY + L2_CACHE_INSERTION_LATENCY;
     if(req_type == 0)
     {
         pipe.instr_miss_stall = dram_stall;
@@ -62,34 +61,12 @@ uint32_t DRAM_Memory_Controller(uint32_t mem_addr, int req_type)
         pipe.data_miss_stall = dram_stall;   
     }
 
-    data = mem_read_32(mem_addr);
+    if(req_type !=2)
+        data = mem_read_32(mem_addr);
+    else 
+        mem_write_32(mem_addr, value);
+
     return data;
-}
-
-void DRAM_Memory_Controller_Wr(uint32_t mem_addr, uint32_t value)
-{
-    uint32_t BankIdx = (mem_addr>>5) & 0X00000007; //addr[7:5]
-    uint32_t RowIdx = (mem_addr>>16) & 0X0000FFFF; //addr[31:16]
-
-    uint32_t dram_stall;
-    uint32_t data;
-
-    dram_stall = L2_MISS_CONTROLLER_LATENCY;
-
-    if(pipe.DRAM_Bank_Row_Open_Idx[BankIdx]!=RowIdx) // row miss
-    {
-        dram_stall = dram_stall + DRAM_PRECHARGE_LATENCY + DRAM_ACTIVATE_LATENCY + DRAM_READWRITE_LATENCY;
-    }
-    else //row hit
-    {
-        dram_stall = dram_stall + DRAM_READWRITE_LATENCY;
-    }
-
-    dram_stall = dram_stall + DRAM_BANK_BUSY_LATENCY + DRAM_DATA_BUS_LATENCY;    
-    pipe.data_miss_stall = dram_stall;   
-    
-    mem_write_32(mem_addr, value);
-    
 }
 
 // L2 Cache code starts
@@ -118,7 +95,7 @@ uint32_t L2cache_lookup(uint32_t mem_addr, int req_type)
             }
             
         L2cache[set_index][blockIdx].address = mem_addr;
-        L2cache[set_index][blockIdx].data = DRAM_Memory_Controller(mem_addr, req_type); //call memory_controller
+        L2cache[set_index][blockIdx].data = DRAM_Memory_Controller(mem_addr, req_type, 0); //call memory_controller
         L2cache[set_index][blockIdx].valid = 1;
 
         //Update LRU status
@@ -190,7 +167,7 @@ void L2cache_write(uint32_t mem_addr, uint32_t val)
 
     L2cache[set_index][blockIdx].address = mem_addr;
     //mem_write_32(mem_addr, val);
-    DRAM_Memory_Controller_Wr(mem_addr, val);
+    DRAM_Memory_Controller(mem_addr, 2, val);
     L2cache[set_index][blockIdx].data = val;
     L2cache[set_index][blockIdx].valid = 1;
     L2cache[set_index][blockIdx].lru = 0;
@@ -213,7 +190,6 @@ uint32_t icache_lookup(uint32_t mem_addr)
     // Its a miss
     if(blockIdx == ICACHE_ASSOCIATIVITY)
     {
-        //pipe.instr_miss_stall = 15;
         for(blockIdx = 0; blockIdx< ICACHE_ASSOCIATIVITY; blockIdx++)
             {
                 if(Icache[set_index][blockIdx].lru == ICACHE_ASSOCIATIVITY-1)

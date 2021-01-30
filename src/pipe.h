@@ -27,7 +27,6 @@ typedef struct instr_cache_block {
 // External instruction cache
 extern icache_block Icache[ICACHE_NUM_SETS][ICACHE_ASSOCIATIVITY]; //Each element of this would be indexed according to appropriate set index
 
-
 //Data cache
 #define DCACHE_NUM_SETS 256
 #define DCACHE_ASSOCIATIVITY 8 //Number of blocks per set
@@ -49,12 +48,10 @@ extern dcache_block Dcache[DCACHE_NUM_SETS][DCACHE_ASSOCIATIVITY]; //Each elemen
 #define L2CACHE_ASSOCIATIVITY 16 //Number of blocks per set
 
 typedef struct L2_cache_block {
-
     uint32_t data;
     uint32_t address;
     int valid;
     int lru; //Max value for this would be equal to DCACHE_ASSOCIATIVITY
-
 } L2cache_block;
 
 // External data cache
@@ -62,7 +59,7 @@ extern L2cache_block L2cache[L2CACHE_NUM_SETS][L2CACHE_ASSOCIATIVITY]; //Each el
 
 #define L2__HIT_LATENCY 15 
 #define L2_MISS_CONTROLLER_LATENCY 5 //Latency between L2 cache and memory controller
-#define L2_MISS__LATENCY 5
+#define L2_CACHE_INSERTION_LATENCY 5
 
 // DRAM parameters
 
@@ -76,7 +73,6 @@ extern L2cache_block L2cache[L2CACHE_NUM_SETS][L2CACHE_ASSOCIATIVITY]; //Each el
 #define DRAM_READWRITE_LATENCY 4
 #define DRAM_BANK_BUSY_LATENCY 100
 #define DRAM_DATA_BUS_LATENCY 50
-
 
 typedef struct request {
     uint32_t address;
