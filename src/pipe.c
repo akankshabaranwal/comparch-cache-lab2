@@ -49,12 +49,12 @@ void DRAM_Insert_to_RequestQueue(uint32_t address) //Call when adding a new requ
     DRAMRequestQueueLastIdx = DRAMRequestQueueLastIdx + 1;
 }
 
-void DRAM_Delete_From_RequestQueue(Request Req) //Call when deleting a new request
+void DRAM_Delete_From_RequestQueue(uint32_t reqaddr) //Call when deleting a new request
 {
     int position;
     for(int i=0; i<DRAMRequestQueueLastIdx; i++)
     {
-        if(DRAMRequestQueue[DRAMRequestQueueLastIdx].address == Req.address)
+        if(DRAMRequestQueue[DRAMRequestQueueLastIdx].address == reqaddr)
             {
                 position = i;
                 break;
@@ -70,8 +70,6 @@ void DRAM_Delete_From_RequestQueue(Request Req) //Call when deleting a new reque
     DRAMRequestQueueLastIdx = DRAMRequestQueueLastIdx -1;
 }
 
-// Assuming that in each cycle you can only schedule one request
-// Theres no queuing of these requests.
 Request ScheduleRequest()
 {
     uint32_t RowIdx;
@@ -97,7 +95,7 @@ Request ScheduleRequest()
         {
             if(MinArrival < DRAMRequestQueue[i].arrival)
                 ReqIdx = i;
-        }
+        }       
         pipe.DRAM_commandbus_stall = 12; //Precharge + Activate + Read
     }
     else
@@ -105,7 +103,64 @@ Request ScheduleRequest()
         pipe.DRAM_commandbus_stall = 4; //Read command only   
     }
 
+    pipe.DRAM_Bank_Busy_stall[BankIdx] = 100;
     return DRAMRequestQueue[ReqIdx];
+}
+
+void DRAM_Bank_Busy() //To model bank busy utilization. Will be called per cycle
+{
+    int i;
+    for(i = 0; i< DRAM_NUM_BANKS ; i++)
+    {
+        if(pipe.DRAM_Bank_Busy_stall[i]>0)
+        {
+                pipe.DRAM_Bank_Busy_stall[i]--;
+        }
+        else
+        {
+            if(pipe.DRAMDataBusFree)
+            {   
+                pipe.DRAM_databus_stall = 100;
+                pipe.DRAM_databus_addr = pipe.DRAM_Bank_Req_addr[i];
+                DRAM_Delete_From_RequestQueue(pipe.DRAM_Bank_Req_addr[i]);
+                pipe.DRAMDataBusFree = 0;
+                break;
+            }
+        }
+    }
+}
+
+void DRAM_Send_Command() //To model Send Command utilization
+{
+    if(pipe.DRAM_commandbus_stall > 0)
+    {
+        pipe.DRAM_commandbus_stall--;
+        
+    }
+    ScheduleRequest();
+    if(pipe.DRAM_commandbus_stall > 0)
+    {
+        pipe.DRAM_commandbus_stall--;
+        return;
+    }
+}
+
+void DRAM_Send_Data() //To model data bus utilization
+{
+    if(pipe.DRAM_databus_stall > 0)
+    {
+        pipe.DRAM_databus_stall--;
+    }
+    
+    // Some code which would notify L2 that data has now been transferred to the bus
+    // Remove from MSHR entry now
+
+    if(pipe.DRAM_databus_stall > 0)
+    {
+        return;
+    }
+    pipe.DRAM_L2_databus_addr = pipe.DRAM_databus_addr;
+    pipe.DRAMDataBusFree = 1;
 }
 
 
@@ -114,6 +169,9 @@ void DRAM_Memory_Controller()
     //DRAM_Insert_to_RequestQueue(NewRequest); L2 cache should call this function.
     // Check timing constraints
     // MSHR operations
+    
+    ScheduleRequest();
+
 }
 
 mshr L2MSHR[NUM_MSHR];
