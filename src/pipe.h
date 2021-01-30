@@ -93,6 +93,12 @@ typedef struct Pipe_State {
     int instr_miss_stall;
     int data_miss_stall;
 
+    int L2_memory_ctrl_stall;
+    uint32_t L2_miss_mem_addr;
+
+    int DRAM_databus_stall;
+    int DRAM_commandbus_stall;
+
 } Pipe_State;
 
 
