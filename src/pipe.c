@@ -30,191 +30,67 @@ void print_op(Pipe_Op *op)
 /* global pipeline state */
 Pipe_State pipe;
 
-Request DRAMRequestQueue[DRAM_REQUEST_QUEUE_SIZE];
+//Request DRAMRequestQueue[DRAM_REQUEST_QUEUE_SIZE];
 int DRAMOpenedRow[DRAM_NUM_BANKS]; // Track the opened row in each bank
-int DRAMRequestQueueLastIdx;
 
-void DRAM_Insert_to_RequestQueue(uint32_t address) //Call when adding a new request
+uint32_t DRAM_Memory_Controller(uint32_t mem_addr, int req_type)
 {
-    Request NewRequest;
-    NewRequest.address=address;
-    NewRequest.ready = 0;
-    NewRequest.arrival = stat_cycles;
-    
-    DRAMRequestQueue[DRAMRequestQueueLastIdx].address = NewRequest.address;
-    DRAMRequestQueue[DRAMRequestQueueLastIdx].ready = NewRequest.ready;
-    DRAMRequestQueue[DRAMRequestQueueLastIdx].arrival = NewRequest.arrival;
+    uint32_t BankIdx = (mem_addr>>5) & 0X00000007; //addr[7:5]
+    uint32_t RowIdx = (mem_addr>>16) & 0X0000FFFF; //addr[31:16]
 
-    DRAMRequestQueueLastIdx = DRAMRequestQueueLastIdx + 1;
-}
+    uint32_t dram_stall;
+    uint32_t data;
 
-void DRAM_Delete_From_RequestQueue(uint32_t reqaddr) //Call when deleting a new request
-{
-    int position;
-    for(int i=0; i<DRAMRequestQueueLastIdx; i++)
+    dram_stall = L2_MISS_CONTROLLER_LATENCY;
+
+    if(pipe.DRAM_Bank_Row_Open_Idx[BankIdx]!=RowIdx) // row miss
     {
-        if(DRAMRequestQueue[DRAMRequestQueueLastIdx].address == reqaddr)
-            {
-                position = i;
-                break;
-            }
+        dram_stall = dram_stall + DRAM_PRECHARGE_LATENCY + DRAM_ACTIVATE_LATENCY + DRAM_READWRITE_LATENCY;
+    }
+    else //row hit
+    {
+        dram_stall = dram_stall + DRAM_READWRITE_LATENCY;
     }
 
-    for(int c=position -1; c<DRAMRequestQueueLastIdx -1; c++)
+    dram_stall = dram_stall + DRAM_BANK_BUSY_LATENCY + DRAM_DATA_BUS_LATENCY;
+    if(req_type == 0)
     {
-        DRAMRequestQueue[c].address = DRAMRequestQueue[c+1].address;
-        DRAMRequestQueue[c].ready = DRAMRequestQueue[c+1].ready;
-        DRAMRequestQueue[c].arrival = DRAMRequestQueue[c+1].arrival;
-    }
-    DRAMRequestQueueLastIdx = DRAMRequestQueueLastIdx -1;
-}
-
-Request ScheduleRequest()
-{
-    uint32_t RowIdx;
-    uint32_t BankIdx;
-    uint32_t MinArrival;
-
-    int ReqIdx, i;
-
-    // Check if request is ready
-    for(ReqIdx = 0; ReqIdx < DRAMRequestQueueLastIdx; ReqIdx ++)
-    {
-        BankIdx = (DRAMRequestQueue[i].address>>5) & 0X00000007; //addr[7:5]
-        RowIdx = (DRAMRequestQueue[i].address>>16) & 0X0000FFFF; //addr[31:16]
-        if(RowIdx == DRAMOpenedRow[BankIdx])
-            break;
-    }
-
-    // Find the request with the least arrival time
-    MinArrival = DRAMRequestQueue[0].arrival;
-    if(ReqIdx == DRAMRequestQueueLastIdx)
-    {
-        for(i = 1; i<DRAMRequestQueueLastIdx; i++)
-        {
-            if(MinArrival < DRAMRequestQueue[i].arrival)
-                ReqIdx = i;
-        }       
-        pipe.DRAM_commandbus_stall = 12; //Precharge + Activate + Read
+        pipe.instr_miss_stall = dram_stall;
     }
     else
     {
-        pipe.DRAM_commandbus_stall = 4; //Read command only   
+        pipe.data_miss_stall = dram_stall;   
     }
 
-    pipe.DRAM_Bank_Busy_stall[BankIdx] = 100;
-    return DRAMRequestQueue[ReqIdx];
+    data = mem_read_32(mem_addr);
+    return data;
 }
 
-void DRAM_Bank_Busy() //To model bank busy utilization. Will be called per cycle
-{
-    int i;
-    for(i = 0; i< DRAM_NUM_BANKS ; i++)
-    {
-        if(pipe.DRAM_Bank_Busy_stall[i]>0)
-        {
-                pipe.DRAM_Bank_Busy_stall[i]--;
-        }
-        else
-        {
-            if(pipe.DRAMDataBusFree)
-            {   
-                pipe.DRAM_databus_stall = 100;
-                pipe.DRAM_databus_addr = pipe.DRAM_Bank_Req_addr[i];
-                DRAM_Delete_From_RequestQueue(pipe.DRAM_Bank_Req_addr[i]);
-                pipe.DRAMDataBusFree = 0;
-                break;
-            }
-        }
-    }
-}
 
-void DRAM_Send_Command() //To model Send Command utilization
+void DRAM_Memory_Controller_Wr(uint32_t mem_addr, uint32_t value)
 {
-    if(pipe.DRAM_commandbus_stall > 0)
-    {
-        pipe.DRAM_commandbus_stall--;
-        
-    }
-    ScheduleRequest();
-    if(pipe.DRAM_commandbus_stall > 0)
-    {
-        pipe.DRAM_commandbus_stall--;
-        return;
-    }
-}
+    uint32_t BankIdx = (mem_addr>>5) & 0X00000007; //addr[7:5]
+    uint32_t RowIdx = (mem_addr>>16) & 0X0000FFFF; //addr[31:16]
 
-void DRAM_Send_Data() //To model data bus utilization
-{
-    if(pipe.DRAM_databus_stall > 0)
+    uint32_t dram_stall;
+    uint32_t data;
+
+    dram_stall = L2_MISS_CONTROLLER_LATENCY;
+
+    if(pipe.DRAM_Bank_Row_Open_Idx[BankIdx]!=RowIdx) // row miss
     {
-        pipe.DRAM_databus_stall--;
+        dram_stall = dram_stall + DRAM_PRECHARGE_LATENCY + DRAM_ACTIVATE_LATENCY + DRAM_READWRITE_LATENCY;
     }
+    else //row hit
+    {
+        dram_stall = dram_stall + DRAM_READWRITE_LATENCY;
+    }
+
+    dram_stall = dram_stall + DRAM_BANK_BUSY_LATENCY + DRAM_DATA_BUS_LATENCY;    
+    pipe.data_miss_stall = dram_stall;   
     
-    // Some code which would notify L2 that data has now been transferred to the bus
-    // Remove from MSHR entry now
-
-    if(pipe.DRAM_databus_stall > 0)
-    {
-        return;
-    }
-    pipe.DRAM_L2_databus_addr = pipe.DRAM_databus_addr;
-    pipe.DRAMDataBusFree = 1;
-}
-
-
-void DRAM_Memory_Controller()
-{
-    //DRAM_Insert_to_RequestQueue(NewRequest); L2 cache should call this function.
-    // Check timing constraints
-    // MSHR operations
+    mem_write_32(mem_addr, value);
     
-    ScheduleRequest();
-
-}
-
-mshr L2MSHR[NUM_MSHR];
-
-void AllocateMSHR(uint32_t address)
-{
-    int i;
-    for(i=0;i<NUM_MSHR;i++)
-    {
-        if(L2MSHR[i].valid==0)
-            break;
-    }
-
-    //TODO: Add check if NUM_MSHR has been exceeded.
-    L2MSHR[i].valid = 1;
-    L2MSHR[i].address = address;
-    L2MSHR[i].done = 0;
-}
-
-void DeallocateMSHR(uint32_t address)
-{
-    int i;
-    for(i=0;i<NUM_MSHR;i++)
-    {
-        if(L2MSHR[i].address==address)
-            break;
-    }
-
-    L2MSHR[i].valid = 0;
-    L2MSHR[i].address = address;
-    L2MSHR[i].done = 1;
-}
-
-void MSHRtoController()
-{
-    if(pipe.L2_miss_mem_addr==-1)
-        return;
-
-    if(pipe.L2_memory_ctrl_stall>0)
-    {   pipe.L2_memory_ctrl_stall--;
-        return;
-    }
-    
-    DRAM_Insert_to_RequestQueue(pipe.L2_miss_mem_addr);
 }
 
 // L2 Cache code starts
@@ -232,33 +108,18 @@ uint32_t L2cache_lookup(uint32_t mem_addr, int req_type)
             break; //Its a hit
     }
 
-    // Its a miss
+    // Its a L2 miss
     if(blockIdx == L2CACHE_ASSOCIATIVITY)
     {
-        if(req_type == 0)
-        {
-            pipe.instr_miss_stall = 100; 
-        }
-        else
-        {
-            pipe.data_miss_stall = 100;
-        } 
 
         for(blockIdx = 0; blockIdx< L2CACHE_ASSOCIATIVITY; blockIdx++)
             {
                 if(L2cache[set_index][blockIdx].lru == L2CACHE_ASSOCIATIVITY-1)
                     break; //Detected the lru block which can be replaced
             }
-        
-        AllocateMSHR(mem_addr);
-        pipe.L2_memory_ctrl_stall = 5;
-        pipe.L2_miss_mem_addr = mem_addr;        
+            
         L2cache[set_index][blockIdx].address = mem_addr;
-        L2cache[set_index][blockIdx].data = mem_read_32(mem_addr);
-        
-        // Once request returned. remove from MSHR
-        DeallocateMSHR(mem_addr);
-
+        L2cache[set_index][blockIdx].data = DRAM_Memory_Controller(mem_addr, req_type); //call memory_controller
         L2cache[set_index][blockIdx].valid = 1;
 
         //Update LRU status
@@ -279,8 +140,6 @@ uint32_t L2cache_lookup(uint32_t mem_addr, int req_type)
         {
             pipe.data_miss_stall = 15;
         }
-        pipe.L2_miss_mem_addr = -1;
-        pipe.L2_memory_ctrl_stall = 0;
 
         for(int i=0; i<L2CACHE_ASSOCIATIVITY; i++)
         {
@@ -330,10 +189,9 @@ void L2cache_write(uint32_t mem_addr, uint32_t val)
         }
     }
 
-    AllocateMSHR(mem_addr);
     L2cache[set_index][blockIdx].address = mem_addr;
-    mem_write_32(mem_addr, val);
-    DeallocateMSHR(mem_addr);
+    //mem_write_32(mem_addr, val);
+    DRAM_Memory_Controller_Wr(mem_addr, val);
     L2cache[set_index][blockIdx].data = val;
     L2cache[set_index][blockIdx].valid = 1;
     L2cache[set_index][blockIdx].lru = 0;
@@ -356,7 +214,7 @@ uint32_t icache_lookup(uint32_t mem_addr)
     // Its a miss
     if(blockIdx == ICACHE_ASSOCIATIVITY)
     {
-        pipe.instr_miss_stall = 15;
+        //pipe.instr_miss_stall = 15;
         for(blockIdx = 0; blockIdx< ICACHE_ASSOCIATIVITY; blockIdx++)
             {
                 if(Icache[set_index][blockIdx].lru == ICACHE_ASSOCIATIVITY-1)
@@ -406,7 +264,6 @@ uint32_t dcache_lookup(uint32_t mem_addr)
     // Its a miss
     if(blockIdx == DCACHE_ASSOCIATIVITY)
     {
-        pipe.data_miss_stall = 15;
         for(blockIdx = 0; blockIdx< DCACHE_ASSOCIATIVITY; blockIdx++)
             {
                 if(Dcache[set_index][blockIdx].lru == DCACHE_ASSOCIATIVITY-1)
@@ -451,7 +308,7 @@ void dcache_write(uint32_t mem_addr, uint32_t val)
     // Its a miss
     if(blockIdx == DCACHE_ASSOCIATIVITY)
     {
-        pipe.data_miss_stall = 15;   
+        //pipe.data_miss_stall = 15;   
         for(blockIdx = 0; blockIdx< DCACHE_ASSOCIATIVITY; blockIdx++)
             {
                 if(Dcache[set_index][blockIdx].lru == DCACHE_ASSOCIATIVITY-1)
@@ -512,18 +369,9 @@ void pipe_init()
                 }       
         }
 
-    //Initializing MSHR array
-    for(int i=0; i<NUM_MSHR; i++)
-    {
-        L2MSHR[i].valid = 0;
-        L2MSHR[i].address = 0;
-        L2MSHR[i].done = 0;
-    }
-
     pipe.instr_miss_stall = 0;
     pipe.data_miss_stall = 0;
 
-    DRAMRequestQueueLastIdx = 0;
 }
 
 
@@ -538,7 +386,6 @@ void pipe_cycle()
     printf("\n");
 #endif
 
-    MSHRtoController();
     pipe_stage_wb();
     pipe_stage_mem();
     pipe_stage_execute();

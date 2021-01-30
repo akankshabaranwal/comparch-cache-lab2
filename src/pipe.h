@@ -12,9 +12,6 @@
 #include "shell.h"
 
 
-
-#define MEMORY_MISS_STALL 50 //Number of blocks per set
-
 #define ICACHE_NUM_SETS 64
 #define ICACHE_ASSOCIATIVITY 4 //Number of blocks per set
 
@@ -86,9 +83,12 @@ extern mshr L2MSHR[NUM_MSHR];
 #define DRAM_REQUEST_QUEUE_SIZE 1000
 
 //DRAM timing parameters
-#define DRAM_PER_COMMAND_LATENCY 4
-#define DRAM_DATA_REQUEST_LATENCY 100
+#define DRAM_ACTIVATE_LATENCY 4
+#define DRAM_PRECHARGE_LATENCY 4
+#define DRAM_READWRITE_LATENCY 4
+#define DRAM_BANK_BUSY_LATENCY 100
 #define DRAM_DATA_BUS_LATENCY 50
+
 
 typedef struct request {
     uint32_t address;
@@ -182,22 +182,8 @@ typedef struct Pipe_State {
     /* place other information here as necessary */
     int instr_miss_stall;
     int data_miss_stall;
-
-    int L2_memory_ctrl_stall;
     
-    uint32_t L2_miss_mem_addr;
-    uint32_t DRAM_Bank_Req_addr[DRAM_NUM_BANKS];
-    uint32_t DRAM_databus_addr;
-    uint32_t DRAM_L2_databus_addr;
-
-    
-
-    int DRAM_databus_stall;
-    int DRAM_commandbus_stall;
-    int DRAM_Bank_Busy_stall[DRAM_NUM_BANKS];
-
-    int DRAMDataBusFree; // To check if databus is free
-    int DRAMCommandBusFree; // To check if commandbus is free
+    uint32_t DRAM_Bank_Row_Open_Idx[DRAM_NUM_BANKS];
 
 } Pipe_State;
 
