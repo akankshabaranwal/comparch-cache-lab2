@@ -190,6 +190,8 @@ typedef struct Pipe_State {
     uint32_t DRAM_databus_addr;
     uint32_t DRAM_L2_databus_addr;
 
+    
+
     int DRAM_databus_stall;
     int DRAM_commandbus_stall;
     int DRAM_Bank_Busy_stall[DRAM_NUM_BANKS];

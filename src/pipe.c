@@ -30,7 +30,6 @@ void print_op(Pipe_Op *op)
 /* global pipeline state */
 Pipe_State pipe;
 
-
 Request DRAMRequestQueue[DRAM_REQUEST_QUEUE_SIZE];
 int DRAMOpenedRow[DRAM_NUM_BANKS]; // Track the opened row in each bank
 int DRAMRequestQueueLastIdx;
@@ -186,7 +185,6 @@ void AllocateMSHR(uint32_t address)
     }
 
     //TODO: Add check if NUM_MSHR has been exceeded.
-    //TODO: Initialize MSHR Array
     L2MSHR[i].valid = 1;
     L2MSHR[i].address = address;
     L2MSHR[i].done = 0;
@@ -219,7 +217,7 @@ void MSHRtoController()
     DRAM_Insert_to_RequestQueue(pipe.L2_miss_mem_addr);
 }
 
-/*L2 cache */
+// L2 Cache code starts
 L2cache_block L2cache[L2CACHE_NUM_SETS][L2CACHE_ASSOCIATIVITY];
 
 //req_type is to know if request is from instruction cache or data cache.
@@ -237,6 +235,15 @@ uint32_t L2cache_lookup(uint32_t mem_addr, int req_type)
     // Its a miss
     if(blockIdx == L2CACHE_ASSOCIATIVITY)
     {
+        if(req_type == 0)
+        {
+            pipe.instr_miss_stall = 100; 
+        }
+        else
+        {
+            pipe.data_miss_stall = 100;
+        } 
+
         for(blockIdx = 0; blockIdx< L2CACHE_ASSOCIATIVITY; blockIdx++)
             {
                 if(L2cache[set_index][blockIdx].lru == L2CACHE_ASSOCIATIVITY-1)
@@ -285,7 +292,6 @@ uint32_t L2cache_lookup(uint32_t mem_addr, int req_type)
     return L2cache[set_index][blockIdx].data;
 }
 
-
 void L2cache_write(uint32_t mem_addr, uint32_t val)
 {
     uint32_t set_index = (mem_addr>>5)&(0X000000FF); //Set index = PC[12:5]
@@ -333,7 +339,6 @@ void L2cache_write(uint32_t mem_addr, uint32_t val)
     L2cache[set_index][blockIdx].lru = 0;
 }
 
-
 /*Instruction cache */
 icache_block Icache[ICACHE_NUM_SETS][ICACHE_ASSOCIATIVITY];
 
@@ -351,7 +356,7 @@ uint32_t icache_lookup(uint32_t mem_addr)
     // Its a miss
     if(blockIdx == ICACHE_ASSOCIATIVITY)
     {
-
+        pipe.instr_miss_stall = 15;
         for(blockIdx = 0; blockIdx< ICACHE_ASSOCIATIVITY; blockIdx++)
             {
                 if(Icache[set_index][blockIdx].lru == ICACHE_ASSOCIATIVITY-1)
@@ -369,8 +374,9 @@ uint32_t icache_lookup(uint32_t mem_addr)
                     Icache[set_index][i].lru++;                
             }
     }
-    else
+    else //Its a hit
     {
+        pipe.instr_miss_stall = 0;
         for(int i=0; i<ICACHE_ASSOCIATIVITY; i++)
         {
             if( Icache[set_index][i].lru < Icache[set_index][blockIdx].lru)
@@ -400,6 +406,7 @@ uint32_t dcache_lookup(uint32_t mem_addr)
     // Its a miss
     if(blockIdx == DCACHE_ASSOCIATIVITY)
     {
+        pipe.data_miss_stall = 15;
         for(blockIdx = 0; blockIdx< DCACHE_ASSOCIATIVITY; blockIdx++)
             {
                 if(Dcache[set_index][blockIdx].lru == DCACHE_ASSOCIATIVITY-1)
@@ -417,8 +424,9 @@ uint32_t dcache_lookup(uint32_t mem_addr)
                     Dcache[set_index][i].lru++;                
             }
     }
-    else
+    else //Its a hit
     {
+        pipe.data_miss_stall = 0;
         for(int i=0; i<DCACHE_ASSOCIATIVITY; i++)
         {
             if( Dcache[set_index][i].lru < Dcache[set_index][blockIdx].lru)
@@ -428,7 +436,6 @@ uint32_t dcache_lookup(uint32_t mem_addr)
     Dcache[set_index][blockIdx].lru = 0;
     return Dcache[set_index][blockIdx].data;
 }
-
 
 void dcache_write(uint32_t mem_addr, uint32_t val)
 {
@@ -444,7 +451,7 @@ void dcache_write(uint32_t mem_addr, uint32_t val)
     // Its a miss
     if(blockIdx == DCACHE_ASSOCIATIVITY)
     {
-        
+        pipe.data_miss_stall = 15;   
         for(blockIdx = 0; blockIdx< DCACHE_ASSOCIATIVITY; blockIdx++)
             {
                 if(Dcache[set_index][blockIdx].lru == DCACHE_ASSOCIATIVITY-1)
@@ -460,6 +467,7 @@ void dcache_write(uint32_t mem_addr, uint32_t val)
     }
     else
     {
+        pipe.data_miss_stall = 0;
         for(int i=0; i<DCACHE_ASSOCIATIVITY; i++)
         {
             if( Dcache[set_index][i].lru < Dcache[set_index][blockIdx].lru)
@@ -502,7 +510,15 @@ void pipe_init()
                     Dcache[set_index][blockIdx].valid = 0;
                     Dcache[set_index][blockIdx].data = 0;
                 }       
-        }        
+        }
+
+    //Initializing MSHR array
+    for(int i=0; i<NUM_MSHR; i++)
+    {
+        L2MSHR[i].valid = 0;
+        L2MSHR[i].address = 0;
+        L2MSHR[i].done = 0;
+    }
 
     pipe.instr_miss_stall = 0;
     pipe.data_miss_stall = 0;
