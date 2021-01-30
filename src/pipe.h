@@ -166,7 +166,7 @@ extern mshr L2MSHR[NUM_MSHR];
 
 #define DRAM_NUM_BANKS 8
 #define DRAM_NUM_ROWS 65536
-#define DRAM_REQUEST_QUEUE_SIZE 10000
+#define DRAM_REQUEST_QUEUE_SIZE 1000
 
 //DRAM timing parameters
 #define DRAM_PER_COMMAND_LATENCY 4
@@ -183,6 +183,7 @@ typedef struct request {
 extern Request DRAMRequestQueue[DRAM_REQUEST_QUEUE_SIZE];
 extern Request DRAMScheduleQueue[DRAM_REQUEST_QUEUE_SIZE][DRAM_NUM_BANKS]; //Track the sceduled requests per bank
 extern int DRAMOpenedRow[DRAM_NUM_BANKS]; // Track the opened row in each bank
+extern int DRAMRequestQueueLastIdx;
 
 /* global variable -- pipeline state */
 extern Pipe_State pipe;

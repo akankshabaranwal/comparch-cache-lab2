@@ -61,6 +61,85 @@ void deallocateMSHR(uint32_t address)
     L2MSHR[i].done = 1;
 }
 
+Request DRAMRequestQueue[DRAM_REQUEST_QUEUE_SIZE];
+Request DRAMScheduleQueue[DRAM_REQUEST_QUEUE_SIZE][DRAM_NUM_BANKS]; //Track the sceduled requests per bank
+int DRAMOpenedRow[DRAM_NUM_BANKS]; // Track the opened row in each bank
+int DRAMRequestQueueLastIdx;
+
+void DRAM_Insert_to_RequestQueue(Request NewRequest) //Call when adding a new request
+{
+    DRAMRequestQueue[DRAMRequestQueueLastIdx].address = NewRequest.address;
+    DRAMRequestQueue[DRAMRequestQueueLastIdx].ready = NewRequest.ready;
+    DRAMRequestQueue[DRAMRequestQueueLastIdx].arrival = NewRequest.arrival;
+    DRAMRequestQueueLastIdx = DRAMRequestQueueLastIdx + 1;
+}
+
+void DRAM_Delete_From_RequestQueue(Request Req) //Call when deleting a new request
+{
+    int position;
+    for(int i=0; i<DRAMRequestQueueLastIdx; i++)
+    {
+        if(DRAMRequestQueue[DRAMRequestQueueLastIdx].address == Req.address)
+            {
+                position = i;
+                break;
+            }
+    }
+
+    for(int c=position -1; c<DRAMRequestQueueLastIdx -1; c++)
+    {
+        DRAMRequestQueue[c].address = DRAMRequestQueue[c+1].address;
+        DRAMRequestQueue[c].ready = DRAMRequestQueue[c+1].ready;
+        DRAMRequestQueue[c].arrival = DRAMRequestQueue[c+1].arrival;
+    }
+    DRAMRequestQueueLastIdx = DRAMRequestQueueLastIdx -1;
+}
+
+// Assuming that in each cycle you can only schedule one request
+Request ScheduleRequest()
+{
+    uint32_t RowIdx;
+    uint32_t BankIdx;
+    uint32_t MinArrival;
+
+    int ReqIdx, i;
+
+    // Check if request is ready
+    for(ReqIdx = 0; ReqIdx < DRAMRequestQueueLastIdx; ReqIdx ++)
+    {
+        BankIdx = (DRAMRequestQueue[i].address>>5) & 0X00000007; //addr[7:5]
+        RowIdx = (DRAMRequestQueue[i].address>>16) & 0X0000FFFF; //addr[31:16]
+        if(RowIdx == DRAMOpenedRow[BankIdx])
+            break;
+    }
+
+    // Find the request with the least arrival time
+    MinArrival = DRAMRequestQueue[0].arrival;
+    if(ReqIdx == DRAMRequestQueueLastIdx)
+    {
+        for(i = 1; i<DRAMRequestQueueLastIdx; i++)
+        {
+            if(MinArrival < DRAMRequestQueue[i].arrival)
+                ReqIdx = i;
+        }
+    }
+
+    return DRAMRequestQueue[ReqIdx];
+}
+
+void DRAM_Memory_Controller(uint32_t address)
+{
+    Request NewRequest;
+    NewRequest.address=address;
+    NewRequest.ready = 0;
+    NewRequest.arrival = stat_cycles;
+    // Insert to queue
+    DRAM_Insert_to_RequestQueue(NewRequest);
+
+    // Check timing constraints
+    // MSHR operations
+}
+
 /*L2 cache */
 L2cache_block L2cache[L2CACHE_NUM_SETS][L2CACHE_ASSOCIATIVITY];
 
@@ -323,6 +402,9 @@ void pipe_init()
 
     pipe.instr_miss_stall = 0;
     pipe.data_miss_stall = 0;
+
+
+    DRAMRequestQueueLastIdx = 0;
 }
 
 
