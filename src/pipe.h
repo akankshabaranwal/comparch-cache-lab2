@@ -181,7 +181,6 @@ typedef struct request {
 } Request;
 
 extern Request DRAMRequestQueue[DRAM_REQUEST_QUEUE_SIZE];
-extern Request DRAMScheduleQueue[DRAM_REQUEST_QUEUE_SIZE][DRAM_NUM_BANKS]; //Track the sceduled requests per bank
 extern int DRAMOpenedRow[DRAM_NUM_BANKS]; // Track the opened row in each bank
 extern int DRAMRequestQueueLastIdx;
 

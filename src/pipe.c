@@ -32,7 +32,7 @@ Pipe_State pipe;
 
 mshr L2MSHR[NUM_MSHR];
 
-void allocateMSHR(uint32_t address)
+void AllocateMSHR(uint32_t address)
 {
     int i;
     for(i=0;i<NUM_MSHR;i++)
@@ -42,12 +42,13 @@ void allocateMSHR(uint32_t address)
     }
 
     //TODO: Add check if NUM_MSHR has been exceeded.
+    //TODO: Initialize MSHR Array
     L2MSHR[i].valid = 1;
     L2MSHR[i].address = address;
     L2MSHR[i].done = 0;
 }
 
-void deallocateMSHR(uint32_t address)
+void DeallocateMSHR(uint32_t address)
 {
     int i;
     for(i=0;i<NUM_MSHR;i++)
@@ -62,15 +63,20 @@ void deallocateMSHR(uint32_t address)
 }
 
 Request DRAMRequestQueue[DRAM_REQUEST_QUEUE_SIZE];
-Request DRAMScheduleQueue[DRAM_REQUEST_QUEUE_SIZE][DRAM_NUM_BANKS]; //Track the sceduled requests per bank
 int DRAMOpenedRow[DRAM_NUM_BANKS]; // Track the opened row in each bank
 int DRAMRequestQueueLastIdx;
 
-void DRAM_Insert_to_RequestQueue(Request NewRequest) //Call when adding a new request
+void DRAM_Insert_to_RequestQueue(uint32_t address) //Call when adding a new request
 {
+    Request NewRequest;
+    NewRequest.address=address;
+    NewRequest.ready = 0;
+    NewRequest.arrival = stat_cycles;
+    
     DRAMRequestQueue[DRAMRequestQueueLastIdx].address = NewRequest.address;
     DRAMRequestQueue[DRAMRequestQueueLastIdx].ready = NewRequest.ready;
     DRAMRequestQueue[DRAMRequestQueueLastIdx].arrival = NewRequest.arrival;
+
     DRAMRequestQueueLastIdx = DRAMRequestQueueLastIdx + 1;
 }
 
@@ -95,7 +101,9 @@ void DRAM_Delete_From_RequestQueue(Request Req) //Call when deleting a new reque
     DRAMRequestQueueLastIdx = DRAMRequestQueueLastIdx -1;
 }
 
+
 // Assuming that in each cycle you can only schedule one request
+// Theres no queuing of these requests.
 Request ScheduleRequest()
 {
     uint32_t RowIdx;
@@ -127,15 +135,9 @@ Request ScheduleRequest()
     return DRAMRequestQueue[ReqIdx];
 }
 
-void DRAM_Memory_Controller(uint32_t address)
+void DRAM_Memory_Controller()
 {
-    Request NewRequest;
-    NewRequest.address=address;
-    NewRequest.ready = 0;
-    NewRequest.arrival = stat_cycles;
-    // Insert to queue
-    DRAM_Insert_to_RequestQueue(NewRequest);
-
+    //DRAM_Insert_to_RequestQueue(NewRequest); L2 cache should call this function.
     // Check timing constraints
     // MSHR operations
 }
@@ -163,8 +165,13 @@ uint32_t L2cache_lookup(uint32_t mem_addr)
                     break; //Detected the lru block which can be replaced
             }
         
+        AllocateMSHR(mem_addr);
         L2cache[set_index][blockIdx].address = mem_addr;
         L2cache[set_index][blockIdx].data = mem_read_32(mem_addr);
+        // DRAM_Insert_to_RequestQueue(mem_addr);
+        // Once request returned. remove from MSHR
+        DeallocateMSHR(mem_addr);
+
         L2cache[set_index][blockIdx].valid = 1;
 
         //Update LRU status
@@ -223,8 +230,10 @@ void L2cache_write(uint32_t mem_addr, uint32_t val)
         }
     }
 
+    AllocateMSHR(mem_addr);
     L2cache[set_index][blockIdx].address = mem_addr;
     mem_write_32(mem_addr, val);
+    DeallocateMSHR(mem_addr);
     L2cache[set_index][blockIdx].data = val;
     L2cache[set_index][blockIdx].valid = 1;
     L2cache[set_index][blockIdx].lru = 0;
