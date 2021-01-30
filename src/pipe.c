@@ -30,6 +30,37 @@ void print_op(Pipe_Op *op)
 /* global pipeline state */
 Pipe_State pipe;
 
+mshr L2MSHR[NUM_MSHR];
+
+void allocateMSHR(uint32_t address)
+{
+    int i;
+    for(i=0;i<NUM_MSHR;i++)
+    {
+        if(L2MSHR[i].valid==0)
+            break;
+    }
+
+    //TODO: Add check if NUM_MSHR has been exceeded.
+    L2MSHR[i].valid = 1;
+    L2MSHR[i].address = address;
+    L2MSHR[i].done = 0;
+}
+
+void deallocateMSHR(uint32_t address)
+{
+    int i;
+    for(i=0;i<NUM_MSHR;i++)
+    {
+        if(L2MSHR[i].address==address)
+            break;
+    }
+
+    L2MSHR[i].valid = 0;
+    L2MSHR[i].address = address;
+    L2MSHR[i].done = 1;
+}
+
 /*L2 cache */
 L2cache_block L2cache[L2CACHE_NUM_SETS][L2CACHE_ASSOCIATIVITY];
 
@@ -47,7 +78,6 @@ uint32_t L2cache_lookup(uint32_t mem_addr)
     // Its a miss
     if(blockIdx == L2CACHE_ASSOCIATIVITY)
     {
-        //pipe.data_miss_stall = MEMORY_MISS_STALL;
         for(blockIdx = 0; blockIdx< L2CACHE_ASSOCIATIVITY; blockIdx++)
             {
                 if(L2cache[set_index][blockIdx].lru == L2CACHE_ASSOCIATIVITY-1)
@@ -67,7 +97,6 @@ uint32_t L2cache_lookup(uint32_t mem_addr)
     }
     else
     {
-        //pipe.data_miss_stall = 0;
         for(int i=0; i<L2CACHE_ASSOCIATIVITY; i++)
         {
             if( L2cache[set_index][i].lru < L2cache[set_index][blockIdx].lru)
@@ -93,7 +122,6 @@ void L2cache_write(uint32_t mem_addr, uint32_t val)
     // Its a miss
     if(blockIdx == L2CACHE_ASSOCIATIVITY)
     {
-        //pipe.data_miss_stall = MEMORY_MISS_STALL;
         for(blockIdx = 0; blockIdx< L2CACHE_ASSOCIATIVITY; blockIdx++)
             {
                 if(L2cache[set_index][blockIdx].lru == L2CACHE_ASSOCIATIVITY-1)
@@ -109,7 +137,6 @@ void L2cache_write(uint32_t mem_addr, uint32_t val)
     }
     else
     {
-        //pipe.data_miss_stall = 0;
         for(int i=0; i<L2CACHE_ASSOCIATIVITY; i++)
         {
             if( L2cache[set_index][i].lru < L2cache[set_index][blockIdx].lru)
@@ -142,7 +169,6 @@ uint32_t icache_lookup(uint32_t mem_addr)
     // Its a miss
     if(blockIdx == ICACHE_ASSOCIATIVITY)
     {
-        //pipe.instr_miss_stall = MEMORY_MISS_STALL;
         for(blockIdx = 0; blockIdx< ICACHE_ASSOCIATIVITY; blockIdx++)
             {
                 if(Icache[set_index][blockIdx].lru == ICACHE_ASSOCIATIVITY-1)
@@ -162,7 +188,6 @@ uint32_t icache_lookup(uint32_t mem_addr)
     }
     else
     {
-        //pipe.instr_miss_stall = 0;
         for(int i=0; i<ICACHE_ASSOCIATIVITY; i++)
         {
             if( Icache[set_index][i].lru < Icache[set_index][blockIdx].lru)
@@ -192,7 +217,6 @@ uint32_t dcache_lookup(uint32_t mem_addr)
     // Its a miss
     if(blockIdx == DCACHE_ASSOCIATIVITY)
     {
-        //pipe.data_miss_stall = MEMORY_MISS_STALL;
         for(blockIdx = 0; blockIdx< DCACHE_ASSOCIATIVITY; blockIdx++)
             {
                 if(Dcache[set_index][blockIdx].lru == DCACHE_ASSOCIATIVITY-1)
@@ -212,7 +236,6 @@ uint32_t dcache_lookup(uint32_t mem_addr)
     }
     else
     {
-        //pipe.data_miss_stall = 0;
         for(int i=0; i<DCACHE_ASSOCIATIVITY; i++)
         {
             if( Dcache[set_index][i].lru < Dcache[set_index][blockIdx].lru)
@@ -254,7 +277,6 @@ void dcache_write(uint32_t mem_addr, uint32_t val)
     }
     else
     {
-        //pipe.data_miss_stall = 0;
         for(int i=0; i<DCACHE_ASSOCIATIVITY; i++)
         {
             if( Dcache[set_index][i].lru < Dcache[set_index][blockIdx].lru)
@@ -302,6 +324,7 @@ void pipe_init()
     pipe.instr_miss_stall = 0;
     pipe.data_miss_stall = 0;
 }
+
 
 void pipe_cycle()
 {

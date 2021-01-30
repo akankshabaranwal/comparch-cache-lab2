@@ -149,6 +149,10 @@ extern L2cache_block L2cache[L2CACHE_NUM_SETS][L2CACHE_ASSOCIATIVITY]; //Each el
 // MSHR
 #define NUM_MSHR 16
 
+#define L2__HIT_LATENCY 15 
+#define L2_MISS_CONTROLLER_LATENCY 5 //Latency between L2 cache and memory controller
+#define L2_MISS__LATENCY 5
+
 typedef struct MSHR {
     uint32_t address;
     int valid;
@@ -157,6 +161,28 @@ typedef struct MSHR {
 } mshr;
 
 extern mshr L2MSHR[NUM_MSHR];
+
+// DRAM parameters
+
+#define DRAM_NUM_BANKS 8
+#define DRAM_NUM_ROWS 65536
+#define DRAM_REQUEST_QUEUE_SIZE 10000
+
+//DRAM timing parameters
+#define DRAM_PER_COMMAND_LATENCY 4
+#define DRAM_DATA_REQUEST_LATENCY 100
+#define DRAM_DATA_BUS_LATENCY 50
+
+typedef struct request {
+    uint32_t address;
+    int ready;
+    uint32_t arrival; // Request arrival cycle. Set to stat_cycle
+
+} Request;
+
+extern Request DRAMRequestQueue[DRAM_REQUEST_QUEUE_SIZE];
+extern Request DRAMScheduleQueue[DRAM_REQUEST_QUEUE_SIZE][DRAM_NUM_BANKS]; //Track the sceduled requests per bank
+extern int DRAMOpenedRow[DRAM_NUM_BANKS]; // Track the opened row in each bank
 
 /* global variable -- pipeline state */
 extern Pipe_State pipe;
